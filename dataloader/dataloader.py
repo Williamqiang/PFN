@@ -219,7 +219,7 @@ def dataloader(args, ner2idx, rel2idx):
     train_dataset = dataprocess(train_data, args.embed_mode, args.max_seq_len)
     test_dataset = dataprocess(test_data, args.embed_mode, args.max_seq_len)
     dev_dataset = dataprocess(dev_data, args.embed_mode, args.max_seq_len)
-    collate_fn = collater(ner2idx, rel2idx)
+    collate_fn = collater(ner2idx, rel2idx) #[words,ner_labels,rc_labels,mask]
 
 
     train_batch = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, collate_fn=collate_fn)
