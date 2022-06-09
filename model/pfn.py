@@ -257,7 +257,7 @@ class PFN(nn.Module):
         x = self.tokenizer(x, return_tensors="pt",
                                   padding='longest',
                                   is_split_into_words=True).to(device)
-        x = self.bert(**x)[0]
+        x = self.bert(**x)[0] #最后一个隐层的所有word的输出，不是cls
         x = x.transpose(0, 1)
 
         if self.training:
