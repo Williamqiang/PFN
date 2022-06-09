@@ -32,8 +32,8 @@ class dataprocess(Dataset):
         # bert_len = original sentence + [CLS] and [SEP]
 
         word_to_bep = self.map_origin_word_to_bert(words)
-        ner_labels = self.ner_label_transform(ner_labels, word_to_bep)
-        rc_labels = self.rc_label_transform(rc_labels, word_to_bep)
+        ner_labels = self.ner_label_transform(ner_labels, word_to_bep)   #更新实体的开始、结束位置
+        rc_labels = self.rc_label_transform(rc_labels, word_to_bep)      #更新实体的开始、结束位置
 
         return (words, ner_labels, rc_labels, bert_len)
 
@@ -115,16 +115,16 @@ def ace_preprocess(data):
 def nyt_and_webnlg_preprocess(data):
     processed = []
     for dic in data:
-        text = dic['text']
-        text = text.split(" ")
+        text = dic['text']  #句子
+        text = text.split(" ") #分割为word
         ner_labels = []
         rc_labels = []
-        trips = dic['triple_list']
+        trips = dic['triple_list']  #[实体1，关系，实体2]
         for trip in trips:
-            subj = text.index(trip[0])
-            obj = text.index(trip[2])
+            subj = text.index(trip[0])   #获取trip[0]的首字母下标
+            obj = text.index(trip[2])    #获取trip[2]的首字母下标
             rel = trip[1]
-            if subj not in ner_labels:
+            if subj not in ner_labels:       
                 ner_labels +=[subj,subj,"None"]
             if obj not in ner_labels:
                 ner_labels +=[obj,obj,"None"]
@@ -211,7 +211,7 @@ def dataloader(args, ner2idx, rel2idx):
         dev_data = ade_and_sci_preprocess(dev_data, args.data)
 
     else:
-        train_data = nyt_and_webnlg_preprocess(train_data)
+        train_data = nyt_and_webnlg_preprocess(train_data)  #(text,ner_labels,rc_labels)  [subj,subj,"None",obj , obj ,"None"]*n, [subj,obj,rel]*m 一个句子里面有n个subj和obj，每个实体关系
         test_data = nyt_and_webnlg_preprocess(test_data)
         dev_data = nyt_and_webnlg_preprocess(dev_data)
 
