@@ -175,12 +175,18 @@ def f1(num):
 class loss(nn.Module):
     def __init__(self):
         super(loss, self).__init__()
-        self.loss_ner = nn.BCELoss(reduction='sum')
+        self.loss_ner = nn.BCELoss(reduction='sum')     #将batch内的损失求和 
         self.loss_re = nn.BCELoss(reduction='sum')
-
+                                                        # 输入值:
+                                                        # tensor([0.7151, 0.7234, 0.3416], grad_fn=<SigmoidBackward>)
+                                                        # 输出的⽬标值:
+                                                        # tensor([0., 1., 0.])
+                                                        # 计算loss的结果:
+                                                        # tensor([1.2558, 0.3239, 0.4180], grad_fn=<BinaryCrossEntropyBackward>)
+        
     def forward(self, ner_pred, ner_label, re_pred, re_label):
         seq_len = ner_pred.size(1)
-        ner_loss = self.loss_ner(ner_pred, ner_label) / seq_len
+        ner_loss = self.loss_ner(ner_pred, ner_label) / seq_len   #平均损失
         re_loss = self.loss_re(re_pred, re_label) / seq_len
         loss = ner_loss + re_loss
         return loss
