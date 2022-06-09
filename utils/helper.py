@@ -71,8 +71,8 @@ class collater():
         ner_labels = [gen_ner_labels(ners, max_len, self.ner2idx) for ners in ner_labels]
         rc_labels = [gen_rc_labels(rcs,max_len, self.rel2idx) for rcs in rc_labels]
 
-        ner_labels = torch.stack(ner_labels, dim=2)
-        rc_labels = torch.stack(rc_labels, dim=2)
+        ner_labels = torch.stack(ner_labels, dim=2)   #[max_len,max_len,Batch_size,len(ner2idx)] dim=2,list中的元素的dim=2的元素拼接在一起，列不变，行变
+        rc_labels = torch.stack(rc_labels, dim=2)     #[max_len,max_len,Batch_size,len(rel2idx)]
         mask = mask_to_tensor(bert_len, batch_size)
 
         return [words,ner_labels,rc_labels,mask]
