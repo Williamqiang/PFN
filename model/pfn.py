@@ -57,43 +57,52 @@ class pfn_unit(nn.Module):
 
 
     def forward(self, x, hidden):
-        h_in, c_in = hidden
+        '''
+            x: [B,hidden]
+        '''
+        h_in, c_in = hidden   #tuple([B,hidden],[B,hidden])
 
-        gates = self.input_transform(x) + self.hidden_transform(h_in)
-        c, eg_cin, rg_cin, eg_c, rg_c = gates[:, :].chunk(5, 1)
+        gates = self.input_transform(x) + self.hidden_transform(h_in)  #[B,5*hidden]
+        c, eg_cin, rg_cin, eg_c, rg_c = gates[:, :].chunk(5, 1)  #类似于multi-head attention，将【hidden，5*hidden】分为5个【hidden，hideen】的tensor
+        
+        #Ct-1
+        eg_cin = 1 - cumsoftmax(eg_cin)   #[B,hidden]
+        rg_cin = cumsoftmax(rg_cin)   #[B,hidden]
+        
+        #Ct  
+        eg_c = 1 - cumsoftmax(eg_c)   #[B,hidden]
+        rg_c = cumsoftmax(rg_c)   #[B,hidden]
 
-        eg_cin = 1 - cumsoftmax(eg_cin)
-        rg_cin = cumsoftmax(rg_cin)
+        c = torch.tanh(c)  #[B,hidden]
 
-        eg_c = 1 - cumsoftmax(eg_c)
-        rg_c = cumsoftmax(rg_c)
-
-        c = torch.tanh(c)
-
-        overlap_c = rg_c * eg_c
-        upper_c = rg_c - overlap_c
-        downer_c = eg_c - overlap_c
-
-        overlap_cin =rg_cin * eg_cin
-        upper_cin = rg_cin - overlap_cin
-        downer_cin = eg_cin - overlap_cin
-
-        share = overlap_cin * c_in + overlap_c * c
-
-        c_re = upper_cin * c_in + upper_c * c + share
-        c_ner = downer_cin * c_in + downer_c * c + share
-        c_share = share
-
-        h_re = torch.tanh(c_re)
-        h_ner = torch.tanh(c_ner)
-        h_share = torch.tanh(c_share)
+        overlap_c = rg_c * eg_c     #[B,hidden] share
+        upper_c = rg_c - overlap_c  #[B,hidden] re
+        downer_c = eg_c - overlap_c #[B,hidden] entity
+        
+        #Ct-1
+        overlap_cin =rg_cin * eg_cin      #[B,hidden] share 对位相乘
+        upper_cin = rg_cin - overlap_cin  #[B,hidden] re
+        downer_cin = eg_cin - overlap_cin #[B,hidden] entity
+        
+        #share
+        share = overlap_cin * c_in + overlap_c * c  #[B,hidden]
+         
+        #compute final useful info 
+        c_re = upper_cin * c_in + upper_c * c + share     #μr=ρr+ρs  #[B,hidden]
+        c_ner = downer_cin * c_in + downer_c * c + share  #μe=ρe+ρs  #[B,hidden]
+        c_share = share                                   #μs=ρs  #[B,hidden]
+        
+        #activate 激活函数
+        h_re = torch.tanh(c_re)           #hr  #[B,hidden]
+        h_ner = torch.tanh(c_ner)         #he   #[B,hidden]
+        h_share = torch.tanh(c_share)     #hs   #[B,hidden]
 
         
-        c_out = torch.cat((c_re, c_ner, c_share), dim=-1)
-        c_out = self.transform(c_out)
-        h_out = torch.tanh(c_out)
+        c_out = torch.cat((c_re, c_ner, c_share), dim=-1)    #[B,3*hidden]
+        c_out = self.transform(c_out)            #nn.Linear(args.hidden_size*3, args.hidden_size) #[B,hidden]
+        h_out = torch.tanh(c_out) 
 
-        return (h_out, c_out), (h_ner, h_re, h_share)
+        return (h_out, c_out), (h_ner, h_re, h_share) 
 
 class encoder(nn.Module):
     def __init__(self, args, input_size):
@@ -107,25 +116,28 @@ class encoder(nn.Module):
         return (h0, c0)
 
     def forward(self, x):
+        '''
+            x: [max_l,batch_size,hidden_size]
+        '''
         seq_len = x.size(0)
         batch_size = x.size(1)
         h_ner, h_re, h_share = [], [], []
-        hidden = self.hidden_init(batch_size)
+        hidden = self.hidden_init(batch_size) #tuple([B,hidden],[B,hidden])
 
         if self.training:
             self.unit.sample_masks()
 
-        for t in range(seq_len):
-            hidden, h_task = self.unit(x[t, :, :], hidden)
-            h_ner.append(h_task[0])
-            h_re.append(h_task[1])
-            h_share.append(h_task[2])
+        for t in range(seq_len):                                               # ( ht    ct)     ( he     hr      hs)
+            hidden, h_task = self.unit(x[t, :, :], hidden)  #self.unit的输出为：(h_out, c_out), (h_ner, h_re, h_share)
+            h_ner.append(h_task[0])      #[he0,……,he len]   0......seq_len-1  #每个he的维度为 [B,hidden]
+            h_re.append(h_task[1])       #[hr0,……,hr len]   0......seq_len-1
+            h_share.append(h_task[2])    #[hs0,……,hs len]   0......seq_len-1
 
-        h_ner = torch.stack(h_ner, dim=0)
-        h_re = torch.stack(h_re, dim=0)
-        h_share = torch.stack(h_share, dim=0)
+        h_ner = torch.stack(h_ner, dim=0)  #[max_l,batch_size,hidden_size]
+        h_re = torch.stack(h_re, dim=0)   #[max_l,batch_size,hidden_size]
+        h_share = torch.stack(h_share, dim=0)  #[max_l,batch_size,hidden_size]
 
-        return h_ner, h_re, h_share
+        return h_ner, h_re, h_share 
 
 
 class ner_unit(nn.Module):
@@ -258,12 +270,12 @@ class PFN(nn.Module):
                                   padding='longest',
                                   is_split_into_words=True).to(device)
         x = self.bert(**x)[0] #最后一个隐层的所有word的输出，不是cls
-        x = x.transpose(0, 1)
+        x = x.transpose(0, 1) # [max_l,batch_size,hidden_size]
 
         if self.training:
             x = self.dropout(x)
 
-        h_ner, h_re, h_share = self.feature_extractor(x)
+        h_ner, h_re, h_share = self.feature_extractor(x) #[max_l,batch_size,hidden_size]
 
         ner_score = self.ner(h_ner, h_share, mask)
         re_core = self.re(h_re, h_share, mask)
