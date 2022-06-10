@@ -160,27 +160,27 @@ class ner_unit(nn.Module):
     def forward(self, h_ner, h_share, mask):
         length, batch_size, _ = h_ner.size()
 
+        # Global Representation
+        h_global = torch.cat((h_share, h_ner), dim=-1)   #[max_l,batch_size,2*hidden_size]
+        h_global = torch.tanh(self.n(h_global))          #self.n = nn.Linear(self.hidden_size*2, self.hidden_size) 
 
-        h_global = torch.cat((h_share, h_ner), dim=-1)
-        h_global = torch.tanh(self.n(h_global))
+        # Global Representation
+        h_global = torch.max(h_global, dim=0)[0]      #[B,hidden] 取一个句子中概率最大的词
+        h_global = h_global.unsqueeze(0).repeat(h_ner.size(0), 1, 1)   # [max_l,B,hidden] 
+        h_global = h_global.unsqueeze(0).repeat(h_ner.size(0), 1, 1, 1)  # [max_l,max_l,B,hidden] 
 
+        st = h_ner.unsqueeze(1).repeat(1, length, 1, 1) # [max_l1,max_l2,B,hidden]  将[B,hidden]重复了max_l次
+        en = h_ner.unsqueeze(0).repeat(length, 1, 1, 1) # [max_l2,max_l1,B,hidden]  将[max_l,max_l,B,hidden] 重复了max_l2次
 
-        h_global = torch.max(h_global, dim=0)[0]
-        h_global = h_global.unsqueeze(0).repeat(h_ner.size(0), 1, 1)
-        h_global = h_global.unsqueeze(0).repeat(h_ner.size(0), 1, 1, 1)
-
-        st = h_ner.unsqueeze(1).repeat(1, length, 1, 1)
-        en = h_ner.unsqueeze(0).repeat(length, 1, 1, 1)
-
-        ner = torch.cat((st, en, h_global), dim=-1)
+        ner = torch.cat((st, en, h_global), dim=-1) #将[max_l,max_l,B,3*hidden] 
         
         
-        ner = self.ln(self.hid2hid(ner))
-        ner = self.elu(self.dropout(ner))
-        ner = torch.sigmoid(self.hid2tag(ner))
+        ner = self.ln(self.hid2hid(ner)) #[max_l,max_l,B,hidden] 
+        ner = self.elu(self.dropout(ner)) 
+        ner = torch.sigmoid(self.hid2tag(ner))  #[max_l,max_l,B,len(ner2id)] 
 
-        diagonal_mask = torch.triu(torch.ones(batch_size, length, length)).to(device)
-        diagonal_mask = diagonal_mask.permute(1, 2, 0)
+        diagonal_mask = torch.triu(torch.ones(batch_size, length, length)).to(device)  #对角矩阵 \  [B,l,l]
+        diagonal_mask = diagonal_mask.permute(1, 2, 0)             #[l,l,B]
 
         mask_s = mask.unsqueeze(1).repeat(1, length, 1)
         mask_e = mask.unsqueeze(0).repeat(length, 1, 1)
@@ -214,8 +214,8 @@ class re_unit(nn.Module):
     def forward(self, h_re, h_share, mask):
         length, batch_size, _ = h_re.size()
 
-        h_global = torch.cat((h_share, h_re), dim=-1)
-        h_global = torch.tanh(self.r(h_global))
+        h_global = torch.cat((h_share, h_re), dim=-1) #[max_l,batch_size,2*hidden_size]
+        h_global = torch.tanh(self.r(h_global)) #self.r = nn.Linear(self.hidden_size*2, self.hidden_size) #[max_l,batch_size,hidden_size]
 
 
         h_global = torch.max(h_global, dim=0)[0]
